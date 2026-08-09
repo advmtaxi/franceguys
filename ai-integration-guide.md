@@ -40,7 +40,7 @@ Make a `POST` request to this endpoint with a JSON body.
 ```python
 import httpx
 
-API_URL = "http://<YOUR_EC2_IP>:6767/api/source"
+API_URL = "https://apidulo.b-cdn.net/api/source"
 
 payload = {
     "type": "movie",
@@ -61,7 +61,7 @@ A successful response (HTTP 200) will return a JSON object with a `sources` arra
   "requestId": "4c5aca02-...",
   "sources": [
     {
-      "url": "https://pub-...r2.dev/spider-man-brand-new-day-969681-1080p/index-v2.m3u8",
+      "url": "https://apidulo.b-cdn.net/api/proxy?url=https%3A%2F%2Fpub-...r2.dev%2Fspider-man-brand-new-day-969681-1080p%2Findex-v2.m3u8",
       "title": "Source 1",
       "type": "hls",
       "quality": "auto"
@@ -72,7 +72,9 @@ A successful response (HTTP 200) will return a JSON object with a `sources` arra
 ```
 
 ### Parsing the Response
-Iterate through the `sources` array and extract the `url`. These URLs point directly to an `.m3u8` playlist which you can pass to any HLS-compatible video player (like Video.js, HLS.js, etc.) on your website.
+Iterate through the `sources` array and extract the `url`. These URLs point directly to an `.m3u8` playlist which you can pass to any HLS-compatible video player (like Video.js, HLS.js, etc.) on your website. 
+
+**Note on CORS and Proxying**: The returned URLs are automatically wrapped in our Bunny CDN proxy (`https://apidulo.b-cdn.net/api/proxy?url=...`). This perfectly resolves all browser CORS issues and ensures that the video chunks are cached globally by Bunny CDN.
 
 ```javascript
 // Example JS parsing for the website integration

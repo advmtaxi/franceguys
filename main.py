@@ -2,9 +2,12 @@ import asyncio
 import json
 import logging
 import time
+import urllib.parse
 from typing import Optional, Any, Dict
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import httpx
 import uvicorn
@@ -17,12 +20,22 @@ SOURCE_URL = "https://dulo.cx/api/source"
 ORIGIN = "https://dulo.gd"
 SESSION_TTL = 28800  # 8 hours
 
+PROXY_BASE_URL = "https://apidulo.b-cdn.net/api/proxy?url="
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-app = FastAPI(title="Dulo API Wrapper", description="Lag-resistant API for Dulo.cx")
+app = FastAPI(title="Dulo API Wrapper", description="Lag-resistant API for Dulo.cx with Proxy")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Global state for session management
 session_cookie: Optional[str] = None
@@ -133,6 +146,13 @@ async def get_sources(req: SourceRequest):
                             session_issued_at = time.time()
                         await asyncio.sleep(1)
                         continue
+                        
+                    # Rewrite URLs for the proxy
+                    for source in data.get("sources", []):
+                        if "url" in source:
+                            encoded_url = urllib.parse.quote(source["url"], safe="")
+                            source["url"] = f"{PROXY_BASE_URL}{encoded_url}"
+                            
                     return data
                 
                 # Check for 403 / 401 session required
@@ -172,6 +192,74 @@ async def get_sources(req: SourceRequest):
                 await asyncio.sleep(2)
                 
         raise HTTPException(status_code=500, detail="Gave up after repeated session_required or network errors")
+
+
+@app.get("/api/proxy")
+async def proxy_m3u8(url: str, request: Request):
+    """Proxy M3U8 and TS files to bypass CORS."""
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing url parameter")
+    
+    client = httpx.AsyncClient()
+    headers = {
+        "User-Agent": UA,
+        "Origin": ORIGIN,
+        "Referer": f"{ORIGIN}/"
+    }
+    
+    try:
+        req = client.build_request("GET", url, headers=headers)
+        r = await client.send(req, stream=True)
+        r.raise_for_status()
+    except Exception as exc:
+        await client.aclose()
+        raise HTTPException(status_code=502, detail=f"Failed to fetch upstream: {str(exc)}")
+        
+    content_type = r.headers.get("Content-Type", "")
+    is_m3u8 = "mpegurl" in content_type.lower() or url.split("?")[0].endswith(".m3u8")
+    
+    if is_m3u8:
+        await r.aread()
+        text = r.text
+        await client.aclose()
+        
+        lines = text.splitlines()
+        rewritten_lines = []
+        base_url = str(r.url)
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                rewritten_lines.append(line)
+            else:
+                absolute_uri = urllib.parse.urljoin(base_url, line)
+                encoded_uri = urllib.parse.quote(absolute_uri, safe="")
+                proxied_uri = f"{PROXY_BASE_URL}{encoded_uri}"
+                rewritten_lines.append(proxied_uri)
+                
+        return Response(
+            content="\n".join(rewritten_lines) + "\n",
+            media_type="application/vnd.apple.mpegurl",
+            headers={
+                "Cache-Control": "no-cache"
+            }
+        )
+    else:
+        # Stream the response for .ts and other files
+        async def stream_generator():
+            try:
+                async for chunk in r.aiter_raw():
+                    yield chunk
+            finally:
+                await client.aclose()
+                
+        return StreamingResponse(
+            stream_generator(),
+            media_type=content_type or "application/octet-stream",
+            headers={
+                "Cache-Control": r.headers.get("Cache-Control", "public, max-age=31536000")
+            }
+        )
 
 
 if __name__ == "__main__":
