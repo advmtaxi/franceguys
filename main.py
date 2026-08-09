@@ -201,7 +201,7 @@ async def proxy_m3u8(url: str, request: Request):
     if not url:
         raise HTTPException(status_code=400, detail="Missing url parameter")
     
-    client = httpx.AsyncClient()
+    client = httpx.AsyncClient(timeout=30.0)
     headers = {
         "User-Agent": UA,
         "Origin": ORIGIN,
@@ -213,8 +213,9 @@ async def proxy_m3u8(url: str, request: Request):
         r = await client.send(req, stream=True)
         r.raise_for_status()
     except Exception as exc:
+        logger.error(f"Upstream fetch failed: {repr(exc)}")
         await client.aclose()
-        raise HTTPException(status_code=502, detail=f"Failed to fetch upstream: {str(exc)}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch upstream: {repr(exc)}")
         
     content_type = r.headers.get("Content-Type", "")
     is_m3u8 = "mpegurl" in content_type.lower() or url.split("?")[0].endswith(".m3u8")
