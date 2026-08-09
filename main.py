@@ -99,7 +99,7 @@ async def get_sources(req: SourceRequest):
     elif req.type != "movie":
         raise HTTPException(status_code=400, detail="invalid type. Must be movie, tv, or anime")
 
-    async with httpx.AsyncClient(http2=True) as client:
+    async with httpx.AsyncClient() as client:
         try:
             cookie = await get_valid_cookie(client)
         except Exception as exc:
