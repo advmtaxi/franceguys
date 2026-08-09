@@ -13,7 +13,7 @@ answers session_required (session missing/expired) the client re-mints a
 fresh session and retries transparently.
 
 Stdlib only (urllib) -> runs on a bare Ubuntu/Amazon-Linux EC2 box with no
-pip installs. Python 3.7+.
+pip installs. Python 3.7+.s
 """
 
 import argparse

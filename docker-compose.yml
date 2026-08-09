@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  dulo-api:
+    build: .
+    container_name: dulo_api
+    ports:
+      - "6767:6767"
+    restart: unless-stopped
+    # Environment variables could be added here if needed in the future
+    # environment:
+    #   - LOG_LEVEL=INFO

@@ -1,6 +1,6 @@
 # dulo.cx — Unofficial API Documentation
 
-Reverse-engineered from live testing on 2026-08-09. The streaming frontend lives at
+2026-08-09. The streaming frontend lives at
 **https://dulo.gd** (dulo.tv / dulo.cx are mirror hosts). The API is fronted by
 Cloudflare and runs Express.
 
@@ -10,7 +10,7 @@ Cloudflare and runs Express.
 
 | Item | Value |
 |---|---|
-| Base URL (API) | `https://dulo.cx` |
+| Base URL (API) | `https://dulo.cx` | 
 | Frontend origin | `https://dulo.gd` |
 | Content type | `application/json` |
 | Auth model | Anonymous session cookie (no signup / no Supabase auth) |
