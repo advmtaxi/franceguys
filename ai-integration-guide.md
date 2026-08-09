@@ -61,7 +61,7 @@ A successful response (HTTP 200) will return a JSON object with a `sources` arra
   "requestId": "4c5aca02-...",
   "sources": [
     {
-      "url": "https://apidulo.b-cdn.net/api/proxy?url=https%3A%2F%2Fpub-...r2.dev%2Fspider-man-brand-new-day-969681-1080p%2Findex-v2.m3u8",
+      "url": "https://apidulo.b-cdn.net/api/proxy/https://pub-...r2.dev/spider-man-brand-new-day-969681-1080p/index-v2.m3u8",
       "title": "Source 1",
       "type": "hls",
       "quality": "auto"

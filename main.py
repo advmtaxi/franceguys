@@ -21,7 +21,7 @@ SOURCE_URL = "https://dulo.cx/api/source"
 ORIGIN = "https://dulo.gd"
 SESSION_TTL = 28800  # 8 hours
 
-PROXY_BASE_URL = "https://apidulo.b-cdn.net/api/proxy?url="
+PROXY_BASE_URL = "https://apidulo.b-cdn.net/api/proxy/"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -151,8 +151,7 @@ async def get_sources(req: SourceRequest):
                     # Rewrite URLs for the proxy
                     for source in data.get("sources", []):
                         if "url" in source:
-                            encoded_url = urllib.parse.quote(source["url"], safe="")
-                            source["url"] = f"{PROXY_BASE_URL}{encoded_url}"
+                            source["url"] = f"{PROXY_BASE_URL}{source['url']}"
                             
                     return data
                 
@@ -195,11 +194,21 @@ async def get_sources(req: SourceRequest):
         raise HTTPException(status_code=500, detail="Gave up after repeated session_required or network errors")
 
 
-@app.get("/api/proxy")
-async def proxy_m3u8(url: str, request: Request):
-    """Proxy M3U8 and TS files to bypass CORS."""
+@app.get("/api/proxy/{url:path}")
+async def proxy_media(url: str, request: Request):
+    """Proxy M3U8 and TS files to bypass CORS. Uses path parameters for readable URLs."""
     if not url:
         raise HTTPException(status_code=400, detail="Missing url parameter")
+    
+    full_url = url
+    if full_url.startswith("http:/") and not full_url.startswith("http://"):
+        full_url = full_url.replace("http:/", "http://", 1)
+    elif full_url.startswith("https:/") and not full_url.startswith("https://"):
+        full_url = full_url.replace("https:/", "https://", 1)
+        
+    query_string = request.url.query
+    if query_string:
+        full_url = f"{full_url}?{query_string}"
     
     client = httpx.AsyncClient(timeout=30.0)
     headers = {
@@ -209,16 +218,16 @@ async def proxy_m3u8(url: str, request: Request):
     }
     
     try:
-        req = client.build_request("GET", url, headers=headers)
+        req = client.build_request("GET", full_url, headers=headers)
         r = await client.send(req, stream=True)
         r.raise_for_status()
     except Exception as exc:
-        logger.error(f"Upstream fetch failed: {repr(exc)}")
+        logger.error(f"Upstream fetch failed for {full_url}: {repr(exc)}")
         await client.aclose()
         raise HTTPException(status_code=502, detail=f"Failed to fetch upstream: {repr(exc)}")
         
     content_type = r.headers.get("Content-Type", "")
-    is_m3u8 = "mpegurl" in content_type.lower() or url.split("?")[0].endswith(".m3u8")
+    is_m3u8 = "mpegurl" in content_type.lower() or full_url.split("?")[0].endswith(".m3u8")
     
     if is_m3u8:
         await r.aread()
@@ -240,16 +249,14 @@ async def proxy_m3u8(url: str, request: Request):
                 def replacer(match):
                     uri = match.group(1)
                     absolute_uri = urllib.parse.urljoin(base_url, uri)
-                    encoded_uri = urllib.parse.quote(absolute_uri, safe="")
-                    proxied_uri = f"{PROXY_BASE_URL}{encoded_uri}"
+                    proxied_uri = f"{PROXY_BASE_URL}{absolute_uri}"
                     return f'URI="{proxied_uri}"'
                 
                 new_line = re.sub(r'URI="([^"]+)"', replacer, line)
                 rewritten_lines.append(new_line)
             else:
                 absolute_uri = urllib.parse.urljoin(base_url, line)
-                encoded_uri = urllib.parse.quote(absolute_uri, safe="")
-                proxied_uri = f"{PROXY_BASE_URL}{encoded_uri}"
+                proxied_uri = f"{PROXY_BASE_URL}{absolute_uri}"
                 rewritten_lines.append(proxied_uri)
                 
         return Response(
