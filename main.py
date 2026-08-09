@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import urllib.parse
+import re
 from typing import Optional, Any, Dict
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -229,8 +230,21 @@ async def proxy_m3u8(url: str, request: Request):
         
         for line in lines:
             line = line.strip()
-            if not line or line.startswith("#"):
+            if not line:
                 rewritten_lines.append(line)
+                continue
+            
+            if line.startswith("#"):
+                # Rewrite URI="..." inside tags (e.g. #EXT-X-MEDIA)
+                def replacer(match):
+                    uri = match.group(1)
+                    absolute_uri = urllib.parse.urljoin(base_url, uri)
+                    encoded_uri = urllib.parse.quote(absolute_uri, safe="")
+                    proxied_uri = f"{PROXY_BASE_URL}{encoded_uri}"
+                    return f'URI="{proxied_uri}"'
+                
+                new_line = re.sub(r'URI="([^"]+)"', replacer, line)
+                rewritten_lines.append(new_line)
             else:
                 absolute_uri = urllib.parse.urljoin(base_url, line)
                 encoded_uri = urllib.parse.quote(absolute_uri, safe="")
@@ -241,7 +255,8 @@ async def proxy_m3u8(url: str, request: Request):
             content="\n".join(rewritten_lines) + "\n",
             media_type="application/vnd.apple.mpegurl",
             headers={
-                "Cache-Control": "no-cache"
+                "Cache-Control": "no-cache",
+                "Access-Control-Allow-Origin": "*"
             }
         )
     else:
@@ -251,7 +266,8 @@ async def proxy_m3u8(url: str, request: Request):
         await client.aclose()
         
         headers = {
-            "Cache-Control": r.headers.get("Cache-Control", "public, max-age=31536000")
+            "Cache-Control": r.headers.get("Cache-Control", "public, max-age=31536000"),
+            "Access-Control-Allow-Origin": "*"
         }
         if "Content-Length" in r.headers:
             headers["Content-Length"] = r.headers["Content-Length"]
