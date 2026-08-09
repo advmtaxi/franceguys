@@ -245,20 +245,23 @@ async def proxy_m3u8(url: str, request: Request):
             }
         )
     else:
-        # Stream the response for .ts and other files
-        async def stream_generator():
-            try:
-                async for chunk in r.aiter_raw():
-                    yield chunk
-            finally:
-                await client.aclose()
-                
-        return StreamingResponse(
-            stream_generator(),
+        # Download the segment fully and return a standard response with Content-Length
+        await r.aread()
+        content = r.content
+        await client.aclose()
+        
+        headers = {
+            "Cache-Control": r.headers.get("Cache-Control", "public, max-age=31536000")
+        }
+        if "Content-Length" in r.headers:
+            headers["Content-Length"] = r.headers["Content-Length"]
+        else:
+            headers["Content-Length"] = str(len(content))
+            
+        return Response(
+            content=content,
             media_type=content_type or "application/octet-stream",
-            headers={
-                "Cache-Control": r.headers.get("Cache-Control", "public, max-age=31536000")
-            }
+            headers=headers
         )
 
 
