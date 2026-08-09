@@ -40,8 +40,19 @@ class SourceRequest(BaseModel):
 async def mint_session(client: httpx.AsyncClient) -> str:
     """Fetch a new session cookie."""
     logger.info("Minting new session...")
-    resp = await client.get(SESSION_URL, headers={"User-Agent": UA}, timeout=30)
-    resp.raise_for_status()
+    headers = {
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": ORIGIN,
+        "Referer": f"{ORIGIN}/"
+    }
+    try:
+        resp = await client.get(SESSION_URL, headers=headers, timeout=30)
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to mint session (HTTP {e.response.status_code}): {e.response.text}")
+        raise
     
     cookie_hdr = resp.headers.get("Set-Cookie", "")
     for part in cookie_hdr.split(","):
@@ -50,6 +61,7 @@ async def mint_session(client: httpx.AsyncClient) -> str:
             token = part.split("=", 1)[1].split(";", 1)[0]
             return f"__Host-amri_session={token}"
     
+    logger.error(f"No cookie in response. Headers: {resp.headers}")
     raise RuntimeError("No __Host-amri_session cookie in /api/session response")
 
 
@@ -88,7 +100,11 @@ async def get_sources(req: SourceRequest):
         raise HTTPException(status_code=400, detail="invalid type. Must be movie, tv, or anime")
 
     async with httpx.AsyncClient(http2=True) as client:
-        cookie = await get_valid_cookie(client)
+        try:
+            cookie = await get_valid_cookie(client)
+        except Exception as exc:
+            logger.error(f"Failed to get valid cookie: {exc}")
+            raise HTTPException(status_code=502, detail=f"Failed to obtain session from upstream: {str(exc)}")
 
         for attempt in range(4):
             headers = {
