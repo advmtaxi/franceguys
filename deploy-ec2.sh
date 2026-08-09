@@ -30,8 +30,13 @@ echo "Starting the application with Docker Compose..."
 # Use docker compose (v2) or docker-compose (v1)
 if docker compose version > /dev/null 2>&1; then
     docker compose up -d --build
-else
+elif command -v docker-compose &> /dev/null; then
     docker-compose up -d --build
+else
+    echo "Docker compose not found, using plain Docker to build and run..."
+    docker build -t dulo-api .
+    docker rm -f dulo_api 2>/dev/null || true
+    docker run -d --name dulo_api -p 6767:6767 --restart unless-stopped dulo-api
 fi
 
 echo "Deployment complete! API is running on port 6767."
